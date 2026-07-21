@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>GBIF Download Manager</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; background: #0d1117; color: #e6edf3; }
+    main { max-width: 1450px; margin: 0 auto; padding: 24px; }
+    h1 { margin-top: 0; }
+    .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 18px; }
+    form { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; }
+    input, select, button { font: inherit; padding: 9px 11px; border-radius: 6px; border: 1px solid #484f58; }
+    input, select { background: #0d1117; color: inherit; }
+    button { cursor: pointer; background: #238636; color: white; border-color: #2ea043; }
+    button.secondary { background: #21262d; border-color: #484f58; }
+    button.warn { background: #9e6a03; border-color: #bb8009; }
+    button.danger { background: #da3633; border-color: #f85149; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #30363d; vertical-align: top; }
+    th { position: sticky; top: 0; background: #161b22; }
+    code { word-break: break-all; }
+    .status { font-weight: 700; }
+    .READY { color: #3fb950; } .FAILED_PERMANENTLY, .FAILED_VALIDATION { color: #f85149; }
+    .RETRY_WAIT { color: #d29922; } .REPLAYING { color: #a371f7; }
+    .badge { display: inline-block; padding: 2px 6px; border: 1px solid #484f58; border-radius: 999px; margin-right: 4px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 5px; min-width: 230px; }
+    .actions button, .actions a { font-size: 12px; padding: 5px 7px; }
+    a { color: #58a6ff; }
+    #message { min-height: 24px; }
+    .muted { color: #8b949e; }
+    details pre { max-height: 420px; overflow: auto; white-space: pre-wrap; }
+    @media (max-width: 850px) { form { grid-template-columns: 1fr; } .table-wrap { overflow-x: auto; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>GBIF Download Manager</h1>
+  <section class="card">
+    <form id="create-form">
+      <input id="url" name="url" type="url" required placeholder="https://www.gbif.org/occurrence/search?...">
+      <select id="mode" name="mode">
+        <option value="auto" selected>Auto (Fixture oder live)</option>
+        <option value="live">Immer live von GBIF</option>
+      </select>
+      <button type="submit">Job anlegen</button>
+    </form>
+    <div id="message"></div>
+  </section>
+
+  <section class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <h2>Jobs</h2>
+      <button class="secondary" onclick="loadJobs()">Aktualisieren</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Zeit</th><th>Status</th><th>Quelle</th><th>Query</th><th>Counts</th><th>Artefakt</th><th>Aktionen</th></tr></thead>
+        <tbody id="jobs"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<script>
+const esc = (value) => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtBytes = (n) => n == null ? '–' : new Intl.NumberFormat('de-DE', {style:'unit', unit:'megabyte', maximumFractionDigits:1}).format(n/1024/1024);
+
+async function api(url, options={}) {
+  const response = await fetch(url, {headers:{'content-type':'application/json', ...(options.headers||{})}, ...options});
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || response.statusText);
+  return data;
+}
+
+function statusClass(status) { return esc(status || ''); }
+
+async function loadJobs() {
+  try {
+    const data = await api('/api/jobs?limit=300');
+    document.getElementById('jobs').innerHTML = data.jobs.map(job => {
+      const ready = job.status === 'READY' && job.artifact_id && !job.artifact_deleted_at;
+      const pinned = Number(job.artifact_is_pinned) === 1;
+      const mapped = Number(job.has_fixture_mapping) === 1;
+      return `<tr>
+        <td>${esc(new Date(job.created_at).toLocaleString())}</td>
+        <td><span class="status ${statusClass(job.status)}">${esc(job.status)}</span><br><span class="muted">${esc(job.error_message || '')}</span></td>
+        <td><span class="badge">${esc(job.source_mode)}</span>${job.source_mode==='FIXTURE'?'<span class="badge">Replay</span>':''}</td>
+        <td><a href="${esc(job.canonical_url)}" target="_blank">GBIF-Suche</a><br><code>${esc(job.query_hash.slice(0,12))}</code></td>
+        <td>vorher: ${esc(job.expected_count ?? '–')}<br>GBIF: ${esc(job.gbif_reported_count ?? '–')}</td>
+        <td>${ready ? `${fmtBytes(job.artifact_size_bytes)}<br><code>${esc((job.artifact_sha256||'').slice(0,12))}</code><br>${pinned?'<span class="badge">fixiert</span>':''}${mapped?'<span class="badge">Fixture</span>':''}<br><span class="muted">${job.artifact_expires_at ? 'Löschung: '+esc(new Date(job.artifact_expires_at).toLocaleString()) : pinned ? 'keine automatische Löschung' : ''}</span>` : '–'}</td>
+        <td><div class="actions">
+          <button class="secondary" onclick="showJob('${esc(job.id)}')">Details</button>
+          ${ready ? `<a href="/api/jobs/${esc(job.id)}/download">Download</a>` : ''}
+          ${ready && !mapped ? `<button onclick="setFixture('${esc(job.id)}')">Fixieren + Query zuordnen</button>` : ''}
+          ${ready && mapped ? `<button class="warn" onclick="removeFixture('${esc(job.id)}')">Fixture lösen</button>` : ''}
+          ${ready && !pinned ? `<button class="secondary" onclick="pin('${esc(job.artifact_id)}', true)">Nur fixieren</button>` : ''}
+          ${ready && pinned && !mapped ? `<button class="secondary" onclick="pin('${esc(job.artifact_id)}', false)">Entfixieren</button>` : ''}
+          ${ready ? `<button class="secondary" onclick="replay('${esc(job.id)}')">Replay starten</button>` : ''}
+        </div></td>
+      </tr>`;
+    }).join('');
+  } catch (error) { document.getElementById('message').textContent = error.message; }
+}
+
+async function showJob(id) {
+  const job = await api('/api/jobs/' + id);
+  const dialog = document.createElement('dialog');
+  dialog.style.maxWidth = '1100px'; dialog.style.width = '90%';
+  dialog.innerHTML = `<form method="dialog"><button style="float:right">Schließen</button></form><h2>Job ${esc(id)}</h2><details open><summary>Daten</summary><pre>${esc(JSON.stringify(job, null, 2))}</pre></details>`;
+  document.body.appendChild(dialog); dialog.showModal(); dialog.addEventListener('close', () => dialog.remove());
+}
+
+async function setFixture(jobId) { await api('/api/jobs/'+jobId+'/fixture', {method:'POST', body:'{}'}); await loadJobs(); }
+async function removeFixture(jobId) { await api('/api/jobs/'+jobId+'/fixture', {method:'DELETE'}); await loadJobs(); }
+async function pin(id, pinned) { await api('/api/artifacts/'+id+'/pin', {method:'POST', body:JSON.stringify({pinned})}); await loadJobs(); }
+async function replay(jobId) { const result = await api('/api/jobs/'+jobId+'/replay', {method:'POST', body:'{}'}); document.getElementById('message').textContent = 'Replay-Job: '+result.job.id; await loadJobs(); }
+
+document.getElementById('create-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const message = document.getElementById('message'); message.textContent = 'Wird angelegt…';
+  try {
+    const result = await api('/api/jobs', {method:'POST', body:JSON.stringify({url:document.getElementById('url').value, mode:document.getElementById('mode').value})});
+    message.textContent = result.deduplicated ? 'Identischer aktiver Job läuft bereits: '+result.job.id : 'Job angelegt: '+result.job.id;
+    await loadJobs();
+  } catch (error) { message.textContent = error.message; }
+});
+
+loadJobs(); setInterval(loadJobs, 5000);
+</script>

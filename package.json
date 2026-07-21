@@ -1,0 +1,22 @@
+{
+  "name": "gbif-download-manager",
+  "version": "0.1.2",
+  "private": true,
+  "description": "Validated GBIF Darwin Core Archive download manager with replay fixtures.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js",
+    "test": "node --test",
+    "validate": "node src/validate-cli.js"
+  },
+  "dependencies": {
+    "crc-32": "1.2.2",
+    "fast-xml-parser": "5.10.1",
+    "fastify": "5.10.0",
+    "yauzl": "3.4.0"
+  }
+}

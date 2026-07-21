@@ -1,0 +1,110 @@
+openapi: 3.1.0
+info:
+  title: GBIF Download Manager API
+  version: 0.1.0
+servers:
+  - url: /
+paths:
+  /api/jobs:
+    post:
+      summary: Create or deduplicate a download job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string, format: uri }
+                mode: { type: string, enum: [auto, live, replay], default: auto }
+                fixtureArtifactId: { type: [string, 'null'] }
+      responses:
+        '202': { description: Job created }
+        '200': { description: Identical active job returned }
+    get:
+      summary: List jobs
+      responses:
+        '200': { description: Job list }
+  /api/jobs/{id}:
+    get:
+      summary: Get job details, attempts, events and validation report
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Job details }
+  /api/jobs/{id}/download:
+    get:
+      summary: Download a ready Darwin Core Archive
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: ZIP archive
+          content:
+            application/zip: {}
+  /api/jobs/{id}/fixture:
+    post:
+      summary: Pin a ready artifact and assign it as fixture for the job query
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Fixture mapping }
+    delete:
+      summary: Remove the fixture mapping for the job query
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Mapping removed }
+  /api/jobs/{id}/replay:
+    post:
+      summary: Create a synthetic replay job from this ready job's artifact
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '202': { description: Replay job created }
+  /api/artifacts/{id}/pin:
+    post:
+      summary: Pin or unpin a valid artifact
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pinned]
+              properties:
+                pinned: { type: boolean }
+                label: { type: [string, 'null'] }
+                description: { type: [string, 'null'] }
+      responses:
+        '200': { description: Artifact state }
+  /api/artifacts:
+    get:
+      summary: List retained artifacts
+      responses:
+        '200': { description: Artifact list }
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200': { description: Healthy }
