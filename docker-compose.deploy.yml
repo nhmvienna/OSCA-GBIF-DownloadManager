@@ -1,0 +1,38 @@
+# Standalone deployment stack for Portainer: the pre-built GBIF Download
+# Manager image from the Forgejo registry, running on its own.
+#
+# The sibling docker-compose.yml builds the image locally for development;
+# this file pulls the CI-built image instead, matching the registry/Portainer
+# workflow. Configuration comes from environment variables (set them in the
+# Portainer stack UI). Worker tuning and ZIP safety limits keep their in-app
+# defaults unless you add them here; see .env.example for the full list.
+
+name: gbif-download-manager
+
+services:
+  gbif-download-manager:
+    image: git.goetzl.online/stefan/gbif-download-manager:latest
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      # Required for live GBIF downloads.
+      GBIF_USERNAME: ${GBIF_USERNAME:-}
+      GBIF_PASSWORD: ${GBIF_PASSWORD:-}
+      GBIF_EMAIL: ${GBIF_EMAIL:-}
+      # Optional HTTP Basic Auth for the web UI and API (both or neither).
+      APP_USERNAME: ${APP_USERNAME:-}
+      APP_PASSWORD: ${APP_PASSWORD:-}
+    ports:
+      - "${MANAGER_PORT:-3001}:3000"
+    volumes:
+      - gbif-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  gbif-data:

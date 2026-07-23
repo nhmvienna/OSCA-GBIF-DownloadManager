@@ -1,0 +1,41 @@
+name: Build and Push gbif-download-manager
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: docker
+    container:
+      image: gcr.io/kaniko-project/executor:debug
+
+    steps:
+      - name: Authenticate Kaniko for registry
+        run: |
+          mkdir -p /kaniko/.docker
+          cat > /kaniko/.docker/config.json <<EOF
+          {
+            "auths": {
+              "git.goetzl.online": {
+                "username": "stefan",
+                "password": "${{ secrets.REPO_REGISTRY_TOKEN }}"
+              }
+            }
+          }
+          EOF
+
+      - name: Build and Push
+        env:
+          GIT_USERNAME: stefan
+          GIT_PASSWORD: ${{ secrets.REPO_REGISTRY_TOKEN }}
+        run: |
+          /kaniko/executor \
+            --context "git://git.goetzl.online/Stefan/NHM-GBIF-DwC-Download-Mannager.git#refs/heads/master" \
+            --dockerfile "Dockerfile" \
+            --destination "git.goetzl.online/stefan/gbif-download-manager:latest" \
+            --destination "git.goetzl.online/stefan/gbif-download-manager:master" \
+            --cache=true \
+            --cache-repo "git.goetzl.online/stefan/cache/gbif-download-manager"
