@@ -278,11 +278,17 @@ export class Store {
     return this.db.prepare(`
       SELECT j.*, a.sha256 AS artifact_sha256, a.size_bytes AS artifact_size_bytes,
              a.validation_status AS artifact_validation_status,
+             latest.gbif_download_key, latest.gbif_doi, latest.gbif_reported_count,
              a.is_pinned AS artifact_is_pinned, a.pin_label,
              a.expires_at AS artifact_expires_at, a.deleted_at AS artifact_deleted_at,
              CASE WHEN qf.query_hash IS NULL THEN 0 ELSE 1 END AS has_fixture_mapping
       FROM jobs j
       LEFT JOIN artifacts a ON a.id = j.artifact_id
+      LEFT JOIN attempts latest ON latest.id = (
+        SELECT attempt.id FROM attempts attempt
+        WHERE attempt.job_id = j.id
+        ORDER BY attempt.attempt_number DESC LIMIT 1
+      )
       LEFT JOIN query_fixtures qf ON qf.query_hash = j.query_hash AND qf.enabled = 1
       ORDER BY j.created_at DESC
       LIMIT ? OFFSET ?

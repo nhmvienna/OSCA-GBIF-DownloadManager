@@ -42,6 +42,25 @@ test('an administrator can retry RETRY_WAIT immediately without losing history',
   assert.ok(store.getJobDetails('job-1').events.some((event) => event.event_type === 'MANUAL_RETRY_REQUESTED'));
 });
 
+test('job list exposes the latest GBIF download DOI and key', (t) => {
+  const store = fixture(t);
+  createJob(store);
+  store.createAttempt({
+    id: 'attempt-1', jobId: 'job-1', attemptNumber: 1,
+    gbifDownloadKey: '0000001-260101120000001', gbifStatus: 'SUCCEEDED',
+    submittedAt: new Date().toISOString(), createdAt: new Date().toISOString(),
+  });
+  store.updateAttempt('attempt-1', {
+    gbif_doi: '10.15468/dl.example',
+    gbif_reported_count: 123,
+  });
+
+  const listed = store.listJobs({ limit: 10 })[0];
+  assert.equal(listed.gbif_download_key, '0000001-260101120000001');
+  assert.equal(listed.gbif_doi, '10.15468/dl.example');
+  assert.equal(listed.gbif_reported_count, 123);
+});
+
 test('deleting a waiting job removes its coordination history', (t) => {
   const store = fixture(t);
   createJob(store);
