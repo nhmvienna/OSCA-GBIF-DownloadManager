@@ -5,6 +5,7 @@ import { config } from './config.js';
 import {
   artifactUrlCandidates,
   cancelDownload,
+  GbifAuthenticationError,
   downloadToFile,
   extractStatusFields,
   getDownloadStatus,
@@ -88,6 +89,18 @@ export class Worker {
     }
 
     this.store.addEvent(job.id, 'PROCESSING_ERROR', error.message, { status: job.status }, 'error');
+
+    if (error instanceof GbifAuthenticationError) {
+      this.store.updateJob(job.id, {
+        error_message: error.message,
+        status: 'FAILED_PERMANENTLY',
+        is_active: 0,
+        completed_at: nowIso(),
+        next_action_at: null
+      });
+      this.store.addEvent(job.id, 'GBIF_AUTHENTICATION_FAILED', 'GBIF rejected the configured credentials; automatic retries were stopped', null, 'error');
+      return;
+    }
 
     if (job.status === 'WAITING_FOR_GBIF') {
       this.store.updateJob(job.id, { error_message: error.message, next_action_at: isoAfter(config.pollIntervalMs) });

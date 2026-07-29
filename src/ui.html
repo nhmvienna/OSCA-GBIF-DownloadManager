@@ -82,6 +82,8 @@ async function loadJobs() {
       const ready = job.status === 'READY' && job.artifact_id && !job.artifact_deleted_at;
       const pinned = Number(job.artifact_is_pinned) === 1;
       const mapped = Number(job.has_fixture_mapping) === 1;
+      const retryable = ['RETRY_WAIT', 'FAILED_PERMANENTLY'].includes(job.status);
+      const deletable = !Number(job.is_active) || job.status === 'RETRY_WAIT';
       return `<tr>
         <td>${esc(new Date(job.created_at).toLocaleString())}</td>
         <td><span class="status ${statusClass(job.status)}">${esc(job.status)}</span><br><span class="muted">${esc(job.error_message || '')}</span></td>
@@ -97,6 +99,8 @@ async function loadJobs() {
           ${ready && !pinned ? `<button class="secondary" onclick="pin('${esc(job.artifact_id)}', true)">Nur fixieren</button>` : ''}
           ${ready && pinned && !mapped ? `<button class="secondary" onclick="pin('${esc(job.artifact_id)}', false)">Entfixieren</button>` : ''}
           ${ready ? `<button class="secondary" onclick="replay('${esc(job.id)}')">Replay starten</button>` : ''}
+          ${retryable ? `<button class="warn" onclick="retryNow('${esc(job.id)}')">Jetzt neu versuchen</button>` : ''}
+          ${deletable ? `<button class="danger" onclick="deleteJob('${esc(job.id)}')">Job löschen</button>` : ''}
         </div></td>
       </tr>`;
     }).join('');
@@ -115,6 +119,8 @@ async function setFixture(jobId) { await api('/api/jobs/'+jobId+'/fixture', {met
 async function removeFixture(jobId) { await api('/api/jobs/'+jobId+'/fixture', {method:'DELETE'}); await loadJobs(); }
 async function pin(id, pinned) { await api('/api/artifacts/'+id+'/pin', {method:'POST', body:JSON.stringify({pinned})}); await loadJobs(); }
 async function replay(jobId) { const result = await api('/api/jobs/'+jobId+'/replay', {method:'POST', body:'{}'}); document.getElementById('message').textContent = 'Replay-Job: '+result.job.id; await loadJobs(); }
+async function retryNow(jobId) { await api('/api/jobs/'+jobId+'/retry', {method:'POST', body:'{}'}); document.getElementById('message').textContent = 'Job wird jetzt erneut versucht.'; await loadJobs(); }
+async function deleteJob(jobId) { if (!confirm('Job wirklich löschen? Ein verbundener OSCA-Import wird als fehlgeschlagen markiert und kann danach erneut gestartet werden.')) return; await api('/api/jobs/'+jobId, {method:'DELETE'}); document.getElementById('message').textContent = 'Job gelöscht.'; await loadJobs(); }
 
 document.getElementById('create-form').addEventListener('submit', async (event) => {
   event.preventDefault();

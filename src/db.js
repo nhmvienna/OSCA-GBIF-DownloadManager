@@ -185,6 +185,52 @@ export class Store {
     return this.getJob(job.id);
   }
 
+  retryJobNow(id) {
+    return this.transaction(() => {
+      const job = this.getJob(id);
+      if (!job) return null;
+      if (job.status !== 'RETRY_WAIT' && job.status !== 'FAILED_PERMANENTLY') {
+        const error = new Error('Only waiting or permanently failed jobs can be retried manually');
+        error.code = 'JOB_NOT_RETRYABLE';
+        throw error;
+      }
+      const otherActive = this.findActiveJob(job.query_hash);
+      if (otherActive && otherActive.id !== id) {
+        const error = new Error('Another active job already exists for this query');
+        error.code = 'ACTIVE_JOB_EXISTS';
+        throw error;
+      }
+      this.updateJob(id, {
+        status: 'RETRY_WAIT',
+        is_active: 1,
+        completed_at: null,
+        next_action_at: nowIso(),
+        error_message: null,
+        locked_by: null,
+        locked_until: null
+      });
+      this.addEvent(id, 'MANUAL_RETRY_REQUESTED', 'An administrator requested an immediate retry');
+      return this.getJob(id);
+    });
+  }
+
+  deleteJob(id) {
+    return this.transaction(() => {
+      const job = this.getJob(id);
+      if (!job) return null;
+      // A network/validation operation already in progress cannot be safely
+      // interrupted by deleting its durable coordination row. RETRY_WAIT has
+      // no running work and terminal jobs are inactive, so both are safe.
+      if (job.is_active && job.status !== 'RETRY_WAIT') {
+        const error = new Error('A running job can only be deleted while it is waiting for a retry');
+        error.code = 'JOB_STILL_RUNNING';
+        throw error;
+      }
+      this.db.prepare('DELETE FROM jobs WHERE id = ?').run(id);
+      return job;
+    });
+  }
+
   updateJob(id, patch) {
     const allowed = new Set([
       'status', 'is_active', 'expected_count', 'gbif_reported_count', 'predicate_json',

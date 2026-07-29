@@ -9,7 +9,8 @@ GBIF can briefly report a download as `SUCCEEDED` before the ZIP is retrievable.
 - tries both documented versioned and unversioned retrieval endpoints,
 - treats HTTP 5xx/404 artifact responses as temporary availability failures,
 - retries without creating a new GBIF job, and
-- starts a new GBIF attempt only if the artifact remains unavailable past the configured attempt timeout.
+- starts a new GBIF attempt only if the artifact remains unavailable past the configured attempt timeout, and
+- reports a rejected GBIF username/password explicitly and stops retrying that job permanently until the configuration is corrected.
 
 
 Node.js service with a Web UI and REST API for creating, polling, downloading and validating GBIF Darwin Core Archive downloads. Valid archives can be pinned and assigned as replay fixtures for their canonical GBIF query.
@@ -29,6 +30,8 @@ See [`docs/architecture.md`](docs/architecture.md) for the state machine and per
 - Downloads ZIP files atomically as `.part` files.
 - Validates ZIP paths, sizes, decompression ratios, entry CRCs, `meta.xml`, core TSV structure, row counts, unique `gbifID`s, `verbatim.txt`, and multimedia references.
 - Retries invalid results hourly. If GBIF returns the same invalid download key, it is not downloaded again.
+- Allows administrators to trigger `RETRY_WAIT`/failed jobs immediately or delete safely waiting/terminal jobs.
+- A deleted job returns `JOB_NOT_FOUND` on later status requests so downstream OSCA imports can fail immediately and expose their retry action.
 - Deletes unpinned artifacts after 30 days.
 - Keeps all job and validation metadata in SQLite.
 - Allows a valid job archive to be pinned and mapped as the fixture for its exact canonical query.

@@ -136,8 +136,38 @@ app.get('/api/jobs', async (request) => {
 
 app.get('/api/jobs/:id', async (request, reply) => {
   const job = store.getJobDetails(request.params.id);
-  if (!job) return reply.code(404).send({ error: 'Job not found' });
+  if (!job) return reply.code(404).send({ code: 'JOB_NOT_FOUND', error: 'Job not found' });
   return job;
+});
+
+app.post('/api/jobs/:id/retry', async (request, reply) => {
+  try {
+    const job = store.retryJobNow(request.params.id);
+    if (!job) return reply.code(404).send({ code: 'JOB_NOT_FOUND', error: 'Job not found' });
+    return { job: publicJob(job) };
+  } catch (error) {
+    if (['JOB_NOT_RETRYABLE', 'ACTIVE_JOB_EXISTS'].includes(error.code)) {
+      return reply.code(409).send({ code: error.code, error: error.message });
+    }
+    throw error;
+  }
+});
+
+app.delete('/api/jobs/:id', async (request, reply) => {
+  try {
+    const job = store.deleteJob(request.params.id);
+    if (!job) return reply.code(404).send({ code: 'JOB_NOT_FOUND', error: 'Job not found' });
+    return {
+      deleted: true,
+      id: job.id,
+      code: 'JOB_DELETED',
+      downstreamStatus: 'FAILED',
+      message: 'The download job was deleted. Downstream imports must be marked failed and may be retried.'
+    };
+  } catch (error) {
+    if (error.code === 'JOB_STILL_RUNNING') return reply.code(409).send({ code: error.code, error: error.message });
+    throw error;
+  }
 });
 
 app.get('/api/jobs/:id/download', async (request, reply) => {

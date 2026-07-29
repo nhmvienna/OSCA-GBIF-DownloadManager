@@ -36,6 +36,28 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Job details }
+        '404': { description: Job not found (JOB_NOT_FOUND) }
+    delete:
+      summary: Delete a terminal job or one currently waiting for retry
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Job deleted; downstreamStatus is FAILED }
+        '409': { description: Job is currently performing work and cannot be safely deleted }
+  /api/jobs/{id}/retry:
+    post:
+      summary: Retry a waiting or permanently failed job immediately
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Job queued for immediate retry }
+        '409': { description: Job cannot currently be retried }
   /api/jobs/{id}/download:
     get:
       summary: Download a ready Darwin Core Archive

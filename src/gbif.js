@@ -7,6 +7,14 @@ function basicAuth() {
   return `Basic ${Buffer.from(`${config.gbifUsername}:${config.gbifPassword}`).toString('base64')}`;
 }
 
+export class GbifAuthenticationError extends Error {
+  constructor(status) {
+    super(`GBIF rejected the configured username or password (HTTP ${status}). Check GBIF_USERNAME and GBIF_PASSWORD.`);
+    this.name = 'GbifAuthenticationError';
+    this.status = status;
+  }
+}
+
 async function checkedFetch(url, options = {}) {
   const response = await fetch(url, {
     ...options,
@@ -18,6 +26,11 @@ async function checkedFetch(url, options = {}) {
     signal: options.signal || AbortSignal.timeout(120_000)
   });
   if (!response.ok) {
+    // The download-request endpoint is the only authenticated checkedFetch
+    // call. A wrong GBIF password must not look like a temporary GBIF outage
+    // and must not be retried forever by the worker.
+    const hasAuthorization = Object.keys(options.headers || {}).some((name) => name.toLowerCase() === 'authorization');
+    if (hasAuthorization && response.status === 401) throw new GbifAuthenticationError(response.status);
     const body = await response.text().catch(() => '');
     throw new Error(`GBIF ${response.status} ${response.statusText} for ${response.url}: ${body.slice(0, 1000)}`);
   }
