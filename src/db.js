@@ -91,6 +91,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS artifacts (
         id TEXT PRIMARY KEY,
         gbif_download_key TEXT,
+        gbif_doi TEXT,
         original_filename TEXT NOT NULL,
         file_path TEXT NOT NULL,
         size_bytes INTEGER NOT NULL,
@@ -129,6 +130,20 @@ export class Store {
         FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_job_events_job ON job_events(job_id, id DESC);
+    `);
+    // Existing installations already have artifacts and attempts. Preserve
+    // provenance on the artifact itself so a pinned fixture retains its DOI
+    // even when the original job/attempt is eventually removed.
+    if (!this.db.prepare('PRAGMA table_info(artifacts)').all().some((column) => column.name === 'gbif_doi')) {
+      this.db.exec('ALTER TABLE artifacts ADD COLUMN gbif_doi TEXT');
+    }
+    this.db.exec(`
+      UPDATE artifacts SET gbif_doi = (
+        SELECT at.gbif_doi FROM attempts at
+        WHERE at.artifact_id = artifacts.id AND at.failure_reason IS NULL AND at.gbif_doi IS NOT NULL
+        ORDER BY at.attempt_number DESC LIMIT 1
+      ) WHERE gbif_doi IS NULL
+        AND EXISTS (SELECT 1 FROM attempts at WHERE at.artifact_id = artifacts.id AND at.failure_reason IS NULL AND at.gbif_doi IS NOT NULL)
     `);
   }
 
@@ -249,6 +264,8 @@ export class Store {
   getJob(id) {
     return this.db.prepare(`
       SELECT j.*, a.sha256 AS artifact_sha256, a.size_bytes AS artifact_size_bytes,
+             a.gbif_download_key AS artifact_gbif_download_key,
+             a.gbif_doi AS artifact_gbif_doi,
              a.validation_status AS artifact_validation_status, a.validation_json,
              a.is_pinned AS artifact_is_pinned, a.pin_label, a.expires_at AS artifact_expires_at,
              a.deleted_at AS artifact_deleted_at,
@@ -412,10 +429,10 @@ export class Store {
   createArtifact(artifact) {
     this.db.prepare(`
       INSERT INTO artifacts(
-        id, gbif_download_key, original_filename, file_path, size_bytes, sha256,
+        id, gbif_download_key, gbif_doi, original_filename, file_path, size_bytes, sha256,
         validation_status, validation_json, is_pinned, created_at, validated_at, expires_at
       ) VALUES (
-        @id, @gbifDownloadKey, @originalFilename, @filePath, @sizeBytes, @sha256,
+        @id, @gbifDownloadKey, @gbifDoi, @originalFilename, @filePath, @sizeBytes, @sha256,
         @validationStatus, @validationJson, @isPinned, @createdAt, @validatedAt, @expiresAt
       )
     `).run(artifact);

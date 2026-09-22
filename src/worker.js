@@ -385,6 +385,7 @@ export class Worker {
     const artifact = this.store.createArtifact({
       id: artifactId,
       gbifDownloadKey: attempt.gbif_download_key,
+      gbifDoi: attempt.gbif_doi ?? null,
       originalFilename: path.basename(finalPath),
       filePath: finalPath,
       sizeBytes: stat.size,

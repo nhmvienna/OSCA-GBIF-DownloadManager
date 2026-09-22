@@ -29,6 +29,11 @@ paths:
   /api/jobs/{id}:
     get:
       summary: Get job details, attempts, events and validation report
+      description: >-
+        READY jobs include artifact_gbif_doi and artifact_gbif_download_key for
+        the validated archive, including fixture replays. Both are null if the
+        artifact has no known GBIF provenance. Individual attempts also expose
+        gbif_doi and gbif_download_key, including failed attempts.
       parameters:
         - in: path
           name: id

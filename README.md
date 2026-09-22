@@ -33,7 +33,7 @@ See [`docs/architecture.md`](docs/architecture.md) for the state machine and per
 - Allows administrators to trigger `RETRY_WAIT`/failed jobs immediately or delete safely waiting/terminal jobs.
 - A deleted job returns `JOB_NOT_FOUND` on later status requests so downstream OSCA imports can fail immediately and expose their retry action.
 - Deletes unpinned artifacts after 30 days.
-- Keeps all job and validation metadata in SQLite.
+- Keeps all job and validation metadata in SQLite. `GET /api/jobs/:id` also reports `artifact_gbif_doi` and `artifact_gbif_download_key` for the **validated artifact**, including fixture replays; failed attempts' DOIs are not used as the archive's provenance.
 - Allows a valid job archive to be pinned and mapped as the fixture for its exact canonical query.
 - Automatically creates a synthetic replay job when `mode=auto` receives a query with a fixture mapping.
 
