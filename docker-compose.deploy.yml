@@ -1,17 +1,19 @@
-# Standalone deployment stack for Portainer: the pre-built GBIF Download
-# Manager image from the Forgejo registry, running on its own.
+# Standalone deployment stack for Portainer: a pre-built GBIF Download
+# Manager image from a container registry, running on its own.
 #
 # The sibling docker-compose.yml builds the image locally for development;
 # this file pulls the CI-built image instead, matching the registry/Portainer
 # workflow. Configuration comes from environment variables (set them in the
-# Portainer stack UI). Worker tuning and ZIP safety limits keep their in-app
-# defaults unless you add them here; see .env.example for the full list.
+# Portainer stack UI). Set MANAGER_IMAGE to the registry image to deploy,
+# e.g. registry.example.org/org/gbif-download-manager:latest. Worker tuning
+# and ZIP safety limits keep their in-app defaults unless you add them here;
+# see .env.example for the full list.
 
 name: gbif-download-manager
 
 services:
   gbif-download-manager:
-    image: git.goetzl.online/stefan/gbif-download-manager:latest
+    image: ${MANAGER_IMAGE:-gbif-download-manager:latest}
     restart: unless-stopped
     environment:
       HOST: 0.0.0.0
